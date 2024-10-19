@@ -1,7 +1,7 @@
 /* Check the comments first */
 
 import { EventEmitter } from "./emitter";
-import { EventDelayedRepository } from "./event-repository";
+import { EVENT_SAVE_DELAY_MS, EventDelayedRepository } from "./event-repository";
 import { EventStatistics } from "./event-statistics";
 import { ResultsTester } from "./results-tester";
 import { triggerRandomly } from "./utils";
@@ -59,19 +59,31 @@ class EventHandler extends EventStatistics<EventName> {
     super();
     this.repository = repository;
 
-    emitter.subscribe(EventName.EventA, () =>
-      this.repository.saveEventData(EventName.EventA, 1)
-    );
+    let latestResponseDate = new Date().getTime() - EVENT_SAVE_DELAY_MS;
+
+    EVENT_NAMES.map(eventName => {
+      emitter.subscribe(eventName, async () => {
+        const eventCount = this.getStats(eventName);
+        const nowDate = new Date().getTime();
+
+        this.setStats(eventName, eventCount + 1);
+
+        if (nowDate > latestResponseDate + EVENT_SAVE_DELAY_MS) {
+          this.repository.saveEventData(eventName, eventCount);
+          latestResponseDate = nowDate;
+        }
+      });
+    });
   }
 }
 
 class EventRepository extends EventDelayedRepository<EventName> {
   // Feel free to edit this class
 
-  async saveEventData(eventName: EventName, _: number) {
+  async saveEventData(eventName: EventName, handlerEventCount: number) {
     try {
-      await this.updateEventStatsBy(eventName, 1);
-      this;
+      const updateEventValue = handlerEventCount - this.getStats(eventName);
+      await this.updateEventStatsBy(eventName,updateEventValue);
     } catch (e) {
       // const _error = e as EventRepositoryError;
       // console.warn(error);
